@@ -2,58 +2,129 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Visualizador GLB</title>
+  <title>Visualizador IFC / GLB</title>
   <style>
     body { margin: 0; overflow: hidden; }
     canvas { display: block; }
+    #loading { 
+      position: absolute; 
+      top: 50%; 
+      left: 50%; 
+      transform: translate(-50%, -50%); 
+      color: white; 
+      font-family: Arial; 
+      z-index: 1000;
+    }
+    #error {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: red;
+      font-family: Arial;
+      z-index: 1000;
+    }
   </style>
 </head>
 <body>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <div id="loading">Carregando modelo...</div>
+  <div id="error"></div>
+
+  <!-- Versão mais recente e estável do Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js"></script>
 
   <script>
-    // Cena, câmera e renderizador
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+    // Debug inicial
+    console.log('Iniciando aplicação Three.js');
+    
+    // Elementos de UI
+    const loadingElement = document.getElementById('loading');
+    const errorElement = document.getElementById('error');
 
-    // Luz
-    const light = new THREE.AmbientLight(0x404040);
-    scene.add(light);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-    directionalLight.position.set(1, 1, 1);
-    scene.add(directionalLight);
+    try {
+      // Cena, câmera e renderizador
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x222222);
+      
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      document.body.appendChild(renderer.domElement);
 
-    // Controles
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
+      // Luz ambiente e direcional
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1);
+      scene.add(ambientLight);
+      
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(10, 10, 10);
+      scene.add(directionalLight);
 
-    // Carregar modelo
-    const loader = new THREE.GLTFLoader();
-    loader.load('/modelo.glb', function(gltf) {
-        scene.add(gltf.scene);
-        camera.position.set(0, 0, 5);
-        controls.update();
-    });
+      // Controles de órbita - AGORA CORRETO
+      const controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
 
-    // Animação
-    function animate() {
-        requestAnimationFrame(animate);
-        controls.update();
-        renderer.render(scene, camera);
-    }
-    animate();
+      // Carregando o modelo GLB
+      const loader = new THREE.GLTFLoader();
+      
+      console.log('Tentando carregar modelo.glb...');
+      
+      // URL do modelo
+      const modelUrl = '/modelo.glb';
+      console.log('URL do modelo:', modelUrl);
 
-    // Redimensionar
-    window.addEventListener('resize', function() {
+      loader.load(modelUrl, 
+        function (gltf) {
+          console.log('Modelo carregado com sucesso!', gltf);
+          loadingElement.style.display = 'none';
+          
+          scene.add(gltf.scene);
+
+          // Centraliza a câmera no modelo
+          const box = new THREE.Box3().setFromObject(gltf.scene);
+          const center = box.getCenter(new THREE.Vector3());
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z);
+
+          camera.position.set(center.x, center.y, center.z + maxDim * 1.5);
+          controls.target.copy(center);
+          
+          console.log('Modelo posicionado. Dimensões:', size);
+        },
+        function (progress) {
+          const percent = (progress.loaded / progress.total * 100).toFixed(2);
+          loadingElement.textContent = `Carregando modelo... ${percent}%`;
+          console.log('Progresso:', percent + '%');
+        },
+        function (error) {
+          console.error('Erro ao carregar modelo:', error);
+          loadingElement.style.display = 'none';
+          errorElement.textContent = 'Erro ao carregar o modelo. Verifique o console.';
+        }
+      );
+
+      // Ajusta ao redimensionar janela
+      window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+      });
+
+      // Loop de renderização
+      function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      }
+      animate();
+
+    } catch (error) {
+      console.error('Erro na inicialização:', error);
+      errorElement.textContent = 'Erro na inicialização: ' + error.message;
+      loadingElement.style.display = 'none';
+    }
   </script>
 </body>
 </html>
