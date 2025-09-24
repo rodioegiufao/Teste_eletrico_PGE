@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizador 3D - Vercel Fix</title>
+    <title>Visualizador 3D - Funcional</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background: #000; }
         canvas { display: block; width: 100%; height: 100%; }
@@ -14,7 +14,7 @@
     </style>
 </head>
 <body>
-    <div id="loading">Carregando...</div>
+    <div id="loading">Iniciando...</div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
@@ -23,95 +23,60 @@
     <script>
         const loading = document.getElementById('loading');
         
-        // TESTAR TODOS OS CAMINHOS POSSÍVEIS NO VERCEL
-        const paths = [
-            '/modelo.glb',
-            './modelo.glb', 
-            'modelo.glb',
-            '/public/modelo.glb',
-            './public/modelo.glb',
-            'public/modelo.glb'
-        ];
+        // INICIALIZAÇÃO IMEDIATA DO THREE.JS
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({antialias: true});
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-        // Primeiro descobrir qual caminho funciona
-        function findCorrectPath() {
-            loading.textContent = 'Procurando arquivo...';
-            
-            return new Promise((resolve, reject) => {
-                let tested = 0;
-                
-                paths.forEach(path => {
-                    fetch(path)
-                        .then(response => {
-                            if (response.ok) {
-                                console.log('✅ Arquivo encontrado em:', path);
-                                resolve(path);
-                            }
-                        })
-                        .catch(() => {
-                            // Ignora erro, continua testando
-                        })
-                        .finally(() => {
-                            tested++;
-                            if (tested === paths.length) {
-                                reject('Nenhum caminho funcionou');
-                            }
-                        });
-                });
-            });
-        }
+        // Luzes
+        const light = new THREE.AmbientLight(0x404040);
+        scene.add(light);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(1, 1, 1);
+        scene.add(dirLight);
 
-        // Inicializar Three.js após encontrar o caminho
-        findCorrectPath()
-            .then(correctPath => {
-                loading.textContent = 'Arquivo encontrado! Iniciando 3D...';
-                
-                // AGORA SIM inicializar Three.js
-                const scene = new THREE.Scene();
-                const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-                const renderer = new THREE.WebGLRenderer({antialias: true});
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                document.body.appendChild(renderer.domElement);
+        // Controles
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        camera.position.z = 5;
 
-                // Luzes
-                const light = new THREE.AmbientLight(0x404040);
-                scene.add(light);
-                const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-                dirLight.position.set(1, 1, 1);
-                scene.add(dirLight);
-
-                // Controles
-                const controls = new THREE.OrbitControls(camera, renderer.domElement);
-                
-                // CARREGAR COM O CAMINHO CORRETO
-                const loader = new THREE.GLTFLoader();
-                loader.load(correctPath, function(gltf) {
-                    loading.style.display = 'none';
-                    scene.add(gltf.scene);
-                    camera.position.z = 5;
-                    controls.update();
-                });
-
-                // Animação
-                function animate() {
-                    requestAnimationFrame(animate);
-                    controls.update();
-                    renderer.render(scene, camera);
-                }
-                animate();
-
-                window.addEventListener('resize', () => {
-                    camera.aspect = window.innerWidth / window.innerHeight;
-                    camera.updateProjectionMatrix();
-                    renderer.setSize(window.innerWidth, window.innerHeight);
-                });
-            })
-            .catch(error => {
-                loading.innerHTML = '❌ Erro: ' + error + '<br>Verifique o console';
+        // LOADER SIMPLES E DIRETO
+        const loader = new THREE.GLTFLoader();
+        
+        loading.textContent = 'Carregando modelo...';
+        
+        // TENTAR APENAS O CAMINHO CORRETO: /modelo.glb
+        loader.load('/modelo.glb', 
+            function(gltf) {
+                loading.style.display = 'none';
+                console.log('✅ Modelo carregado com sucesso!');
+                scene.add(gltf.scene);
+            },
+            function(progress) {
+                const percent = Math.round((progress.loaded / progress.total) * 100);
+                loading.textContent = `Carregando: ${percent}%`;
+            },
+            function(error) {
+                loading.innerHTML = '❌ Erro ao carregar. Verifique o console.';
                 loading.style.color = 'red';
-                console.error('Erro:', error);
-            });
+                console.error('Erro detalhado:', error);
+            }
+        );
+
+        // Animação
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
-
