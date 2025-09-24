@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizador OBJ</title>
+    <title>Visualizador IFC - IFC.js</title>
     <style>
         body { 
             margin: 0; 
             padding: 0; 
             overflow: hidden; 
-            background: #1e1e1e;
             font-family: Arial, sans-serif;
         }
-        canvas { 
-            display: block; 
-            width: 100%; 
-            height: 100%; 
+        #viewer-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
         }
         #loading {
             position: absolute;
@@ -23,7 +22,6 @@
             left: 50%;
             transform: translate(-50%, -50%);
             color: white;
-            font-size: 18px;
             background: rgba(0,0,0,0.7);
             padding: 20px;
             border-radius: 10px;
@@ -35,283 +33,267 @@
             left: 10px;
             background: rgba(0,0,0,0.7);
             color: white;
-            padding: 10px;
+            padding: 15px;
             border-radius: 5px;
             z-index: 1000;
         }
-        #fileInput {
-            display: none;
-        }
-        .file-btn {
+        .btn {
             background: #007bff;
             color: white;
             border: none;
             padding: 8px 15px;
+            margin: 5px;
             border-radius: 5px;
             cursor: pointer;
-            margin: 5px;
         }
-        .file-btn:hover {
-            background: #0056b3;
-        }
+        .btn:hover { background: #0056b3; }
+        .btn:disabled { background: #6c757d; cursor: not-allowed; }
     </style>
 </head>
 <body>
-    <div id="loading">Carregando visualizador OBJ...</div>
-    
-    <div id="controls">
-        <input type="file" id="fileInput" accept=".obj,.mtl">
-        <button class="file-btn" onclick="document.getElementById('fileInput').click()">
-            Carregar OBJ
-        </button>
-        <button class="file-btn" onclick="resetCamera()">Reset Câmera</button>
-        <span id="info"></span>
+    <div id="viewer-container">
+        <div id="loading">Carregando visualizador IFC...</div>
+        <div id="controls">
+            <input type="file" id="fileInput" accept=".ifc" style="display: none;">
+            <button class="btn" onclick="document.getElementById('fileInput').click()">
+                📁 Carregar IFC
+            </button>
+            <button class="btn" onclick="toggleProperties()">📊 Propriedades</button>
+            <button class="btn" onclick="resetView()">🔄 Reset Vista</button>
+            <span id="info" style="margin-left: 10px;"></span>
+        </div>
     </div>
 
-    <!-- Three.js e loaders -->
+    <!-- IFC.js via CDN -->
+    <script src="https://unpkg.com/web-ifc@0.0.43/web-ifc-api.js"></script>
+    <script src="https://unpkg.com/web-ifc-three@0.0.119/dist/web-ifc-three.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
 
     <script>
-        // Elementos da interface
+        // Elementos da UI
         const loadingElement = document.getElementById('loading');
         const infoElement = document.getElementById('info');
         const fileInput = document.getElementById('fileInput');
+        const viewerContainer = document.getElementById('viewer-container');
 
         // Variáveis globais
-        let scene, camera, renderer, controls, currentObject;
+        let ifcModel;
+        let selectedElement = null;
 
-        // Inicializar Three.js
-        function initThreeJS() {
-            // Cena
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x2a2a2a);
-            
-            // Câmera
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(10, 10, 10);
-            
-            // Renderizador
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            document.body.appendChild(renderer.domElement);
-            
-            // Luzes
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-            scene.add(ambientLight);
-            
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(50, 50, 50);
-            scene.add(directionalLight);
-            
-            // Controles de órbita
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-            
-            // Grade de referência
-            const gridHelper = new THREE.GridHelper(100, 20);
-            scene.add(gridHelper);
-            
-            // Eixos coordenados
-            const axesHelper = new THREE.AxesHelper(10);
-            scene.add(axesHelper);
-            
-            loadingElement.style.display = 'none';
-        }
+        // Configuração do IFC.js
+        const ifcAPI = new WebIFC.IfcAPI();
+        const ifcLoader = new WebIFCThree.IfcLoader();
 
-        // Carregar OBJ com MTL (materiais)
-        function loadOBJWithMTL(objUrl, mtlUrl) {
-            loadingElement.style.display = 'block';
-            loadingElement.textContent = 'Carregando materiais...';
-            
-            const mtlLoader = new THREE.MTLLoader();
-            mtlLoader.setPath(getPath(mtlUrl));
-            
-            mtlLoader.load(getFilename(mtlUrl), function(materials) {
-                materials.preload();
-                loadingElement.textContent = 'Carregando modelo...';
+        // Inicializar visualizador
+        async function initViewer() {
+            try {
+                loadingElement.textContent = 'Inicializando IFC.js...';
                 
-                const objLoader = new THREE.OBJLoader();
-                objLoader.setMaterials(materials);
-                objLoader.setPath(getPath(objUrl));
-                
-                objLoader.load(getFilename(objUrl), function(object) {
-                    onOBJLoaded(object);
-                }, undefined, function(error) {
-                    console.error('Erro ao carregar OBJ:', error);
-                    loadingElement.textContent = 'Erro ao carregar OBJ';
-                });
-            }, undefined, function(error) {
-                console.error('Erro ao carregar MTL:', error);
-                // Tentar carregar OBJ sem materiais
-                loadOBJWithoutMTL(objUrl);
-            });
-        }
+                // Configurar Three.js
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color(0xaaaaaa);
 
-        // Carregar OBJ sem MTL (apenas geometria)
-        function loadOBJWithoutMTL(objUrl) {
-            loadingElement.textContent = 'Carregando geometria...';
-            
-            const objLoader = new THREE.OBJLoader();
-            objLoader.setPath(getPath(objUrl));
-            
-            objLoader.load(getFilename(objUrl), function(object) {
-                // Aplicar material básico se não houver materiais
-                object.traverse(function(child) {
-                    if (child.isMesh) {
-                        child.material = new THREE.MeshLambertMaterial({ 
-                            color: 0x808080,
-                            flatShading: true 
-                        });
-                    }
-                });
-                onOBJLoaded(object);
-            }, undefined, function(error) {
-                console.error('Erro ao carregar OBJ:', error);
-                loadingElement.textContent = 'Erro ao carregar arquivo';
-            });
-        }
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.set(10, 10, 10);
 
-        // Quando o OBJ é carregado com sucesso
-        function onOBJLoaded(object) {
-            // Remover objeto anterior
-            if (currentObject) {
-                scene.remove(currentObject);
-            }
-            
-            // Adicionar novo objeto
-            scene.add(object);
-            currentObject = object;
-            
-            // Calcular bounding box e ajustar câmera
-            const bbox = new THREE.Box3().setFromObject(object);
-            const center = bbox.getCenter(new THREE.Vector3());
-            const size = bbox.getSize(new THREE.Vector3());
-            const maxDim = Math.max(size.x, size.y, size.z);
-            
-            // Ajustar câmera
-            camera.position.copy(center);
-            camera.position.x += maxDim * 1.5;
-            camera.position.y += maxDim * 0.5;
-            camera.position.z += maxDim * 1.5;
-            
-            controls.target.copy(center);
-            controls.update();
-            
-            // Atualizar informações
-            let vertexCount = 0;
-            let faceCount = 0;
-            object.traverse(function(child) {
-                if (child.isMesh) {
-                    vertexCount += child.geometry.attributes.position.count;
-                    faceCount += child.geometry.index ? child.geometry.index.count / 3 : 0;
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(viewerContainer.clientWidth, viewerContainer.clientHeight);
+                viewerContainer.appendChild(renderer.domElement);
+
+                // Luzes
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                scene.add(ambientLight);
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(50, 50, 50);
+                scene.add(directionalLight);
+
+                // Controles
+                const controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+
+                // Inicializar IFC.js
+                await ifcAPI.Init();
+                ifcLoader.ifcManager.setWasmPath("https://unpkg.com/web-ifc@0.0.43/");
+                ifcLoader.setupIfcLoader(ifcAPI, scene);
+
+                // Event listener para seleção de elementos
+                window.addEventListener('click', (event) => {
+                    const mouse = new THREE.Vector2();
+                    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                    mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+                    
+                    selectElement(mouse, camera, ifcLoader);
+                });
+
+                // Animação
+                function animate() {
+                    requestAnimationFrame(animate);
+                    controls.update();
+                    renderer.render(scene, camera);
                 }
-            });
-            
-            infoElement.textContent = `Vértices: ${vertexCount} | Faces: ${faceCount}`;
-            loadingElement.style.display = 'none';
-            
-            console.log('OBJ carregado com sucesso!', object);
+                animate();
+
+                // Redimensionamento
+                window.addEventListener('resize', () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+
+                loadingElement.style.display = 'none';
+                infoElement.textContent = 'Pronto para carregar IFC';
+
+                console.log('✅ Visualizador IFC inicializado!');
+
+            } catch (error) {
+                console.error('Erro na inicialização:', error);
+                loadingElement.textContent = 'Erro ao inicializar visualizador';
+            }
         }
 
-        // Carregar OBJ a partir de arquivo local
-        function loadOBJFromFile(file) {
-            if (!file.name.toLowerCase().endsWith('.obj')) {
-                alert('Por favor, selecione um arquivo .OBJ');
+        // Carregar arquivo IFC
+        async function loadIFC(file) {
+            if (!file || !file.name.toLowerCase().endsWith('.ifc')) {
+                alert('Por favor, selecione um arquivo .IFC');
                 return;
             }
-            
-            loadingElement.style.display = 'block';
-            loadingElement.textContent = 'Lendo arquivo...';
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const objLoader = new THREE.OBJLoader();
-                try {
-                    const object = objLoader.parse(e.target.result);
-                    onOBJLoaded(object);
-                } catch (error) {
-                    console.error('Erro ao analisar OBJ:', error);
-                    loadingElement.textContent = 'Erro ao ler arquivo OBJ';
-                }
-            };
-            reader.readAsText(file);
-        }
 
-        // Funções auxiliares
-        function getPath(url) {
-            return url.substring(0, url.lastIndexOf('/') + 1);
-        }
+            try {
+                loadingElement.style.display = 'block';
+                loadingElement.textContent = 'Carregando IFC...';
 
-        function getFilename(url) {
-            return url.substring(url.lastIndexOf('/') + 1);
-        }
+                const url = URL.createObjectURL(file);
+                ifcModel = await ifcLoader.load(url);
+                
+                URL.revokeObjectURL(url);
 
-        function resetCamera() {
-            if (currentObject) {
-                const bbox = new THREE.Box3().setFromObject(currentObject);
+                // Ajustar vista ao modelo
+                const bbox = new THREE.Box3().setFromObject(ifcModel);
                 const center = bbox.getCenter(new THREE.Vector3());
                 const size = bbox.getSize(new THREE.Vector3());
                 const maxDim = Math.max(size.x, size.y, size.z);
-                
+
                 camera.position.copy(center);
                 camera.position.x += maxDim * 1.5;
                 camera.position.y += maxDim * 0.5;
                 camera.position.z += maxDim * 1.5;
+
+                controls.target.copy(center);
+                controls.update();
+
+                infoElement.textContent = `IFC carregado: ${file.name}`;
+                loadingElement.style.display = 'none';
+
+                console.log('✅ IFC carregado com sucesso!', ifcModel);
+
+            } catch (error) {
+                console.error('Erro ao carregar IFC:', error);
+                loadingElement.textContent = 'Erro ao carregar arquivo IFC';
+            }
+        }
+
+        // Selecionar elemento no modelo
+        async function selectElement(mouse, camera, ifcLoader) {
+            const element = await ifcLoader.ifcManager.pick(mouse, camera, ifcModel);
+            
+            if (element) {
+                // Remover seleção anterior
+                if (selectedElement) {
+                    ifcLoader.ifcManager.removeSubset(ifcModel, selectedMaterial);
+                }
                 
+                // Destacar elemento selecionado
+                selectedElement = element;
+                ifcLoader.ifcManager.createSubset({
+                    modelID: ifcModel,
+                    ids: [element],
+                    removePrevious: true,
+                    material: new THREE.MeshLambertMaterial({ color: 0xff0000 })
+                });
+
+                // Mostrar propriedades
+                const properties = await ifcLoader.ifcManager.getItemProperties(ifcModel, element);
+                console.log('Propriedades do elemento:', properties);
+                
+                showProperties(properties);
+            }
+        }
+
+        // Mostrar propriedades
+        function showProperties(properties) {
+            // Criar painel de propriedades
+            let propsPanel = document.getElementById('properties-panel');
+            if (!propsPanel) {
+                propsPanel = document.createElement('div');
+                propsPanel.id = 'properties-panel';
+                propsPanel.style.cssText = `
+                    position: absolute;
+                    top: 60px;
+                    right: 10px;
+                    background: rgba(0,0,0,0.8);
+                    color: white;
+                    padding: 15px;
+                    border-radius: 5px;
+                    max-width: 300px;
+                    max-height: 400px;
+                    overflow-y: auto;
+                    z-index: 1000;
+                `;
+                viewerContainer.appendChild(propsPanel);
+            }
+
+            let html = '<h3>📊 Propriedades</h3>';
+            if (properties) {
+                for (const [key, value] of Object.entries(properties)) {
+                    if (value && typeof value === 'object') {
+                        html += `<strong>${key}:</strong><br>`;
+                        for (const [subKey, subValue] of Object.entries(value)) {
+                            if (subValue !== null && subValue !== undefined) {
+                                html += `&nbsp;&nbsp;${subKey}: ${subValue}<br>`;
+                            }
+                        }
+                    } else if (value !== null && value !== undefined) {
+                        html += `<strong>${key}:</strong> ${value}<br>`;
+                    }
+                }
+            }
+            propsPanel.innerHTML = html;
+        }
+
+        function toggleProperties() {
+            const panel = document.getElementById('properties-panel');
+            if (panel) {
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        function resetView() {
+            if (ifcModel) {
+                const bbox = new THREE.Box3().setFromObject(ifcModel);
+                const center = bbox.getCenter(new THREE.Vector3());
+                const size = bbox.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z);
+
+                camera.position.copy(center);
+                camera.position.x += maxDim * 1.5;
+                camera.position.y += maxDim * 0.5;
+                camera.position.z += maxDim * 1.5;
+
                 controls.target.copy(center);
                 controls.update();
             }
         }
 
         // Event listeners
-        fileInput.addEventListener('change', function(e) {
+        fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
-            if (file) {
-                loadOBJFromFile(file);
-            }
+            if (file) loadIFC(file);
         });
 
-        // Carregar OBJ automaticamente se especificado na URL
-        function loadFromURL() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const objParam = urlParams.get('obj');
-            
-            if (objParam) {
-                const mtlParam = urlParams.get('mtl') || objParam.replace('.obj', '.mtl');
-                
-                if (mtlParam) {
-                    loadOBJWithMTL(objParam, mtlParam);
-                } else {
-                    loadOBJWithoutMTL(objParam);
-                }
-            }
-        }
-
-        // Inicialização
-        window.addEventListener('load', function() {
-            initThreeJS();
-            loadFromURL();
-            
-            // Animação
-            function animate() {
-                requestAnimationFrame(animate);
-                controls.update();
-                renderer.render(scene, camera);
-            }
-            animate();
-
-            // Redimensionamento
-            window.addEventListener('resize', function() {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            });
-        });
+        // Inicializar quando a página carregar
+        window.addEventListener('load', initViewer);
     </script>
 </body>
 </html>
