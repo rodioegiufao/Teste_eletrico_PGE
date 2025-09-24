@@ -85,7 +85,7 @@
                 
                 // CARREGAR COM O CAMINHO CORRETO
                 const loader = new THREE.GLTFLoader();
-                loader.load('https://drive.google.com/file/d/15Ko5rWZgyRbkFMudCxnSdocDiN2t-_n5/view?usp=sharing', function(gltf) {
+                loader.load(correctPath, function(gltf) {
                     loading.style.display = 'none';
                     scene.add(gltf.scene);
                     camera.position.z = 5;
@@ -114,3 +114,4 @@
     </script>
 </body>
 </html>
+
