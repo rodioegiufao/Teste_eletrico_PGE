@@ -38,7 +38,7 @@
     // 👉 Caminho do modelo:
     // - Vercel: coloque "modelo.glb" dentro da pasta /public
     // - GitHub Pages: deixe "modelo.glb" na mesma pasta do index.html
-    loader.load('modelo.glb', function (gltf) {
+    loader.load('/modelo.glb', function (gltf) {
         scene.add(gltf.scene);
 
         // Centraliza a câmera no modelo
@@ -71,3 +71,4 @@
   </script>
 </body>
 </html>
+
