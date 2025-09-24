@@ -2,14 +2,29 @@
   "version": 2,
   "builds": [
     {
-      "src": "index.html",
+      "src": "ifc-viewer.html",
       "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/index.html"
+      "dest": "/ifc-viewer.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*\\.ifc)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/octet-stream"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
     }
   ]
 }
