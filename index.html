@@ -3,297 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizador IFC - IFC.js</title>
+    <title>PGE - Visualizador IFC</title>
     <style>
         body { 
             margin: 0; 
-            padding: 0; 
-            overflow: hidden; 
+            padding: 40px; 
             font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
-        #viewer-container {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
         }
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            background: rgba(0,0,0,0.7);
-            padding: 20px;
-            border-radius: 10px;
-            z-index: 1000;
-        }
-        #controls {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.7);
-            color: white;
-            padding: 15px;
-            border-radius: 5px;
-            z-index: 1000;
+        h1 { 
+            color: #333; 
+            margin-bottom: 20px;
         }
         .btn {
+            display: inline-block;
             background: #007bff;
             color: white;
-            border: none;
-            padding: 8px 15px;
-            margin: 5px;
-            border-radius: 5px;
-            cursor: pointer;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 8px;
+            margin: 10px;
+            font-size: 16px;
+            transition: all 0.3s;
         }
-        .btn:hover { background: #0056b3; }
-        .btn:disabled { background: #6c757d; cursor: not-allowed; }
+        .btn:hover { 
+            background: #0056b3; 
+            transform: translateY(-2px);
+        }
+        .features {
+            text-align: left;
+            margin: 30px 0;
+        }
+        .feature-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
-    <div id="viewer-container">
-        <div id="loading">Carregando visualizador IFC...</div>
-        <div id="controls">
-            <input type="file" id="fileInput" accept=".ifc" style="display: none;">
-            <button class="btn" onclick="document.getElementById('fileInput').click()">
-                📁 Carregar IFC
-            </button>
-            <button class="btn" onclick="toggleProperties()">📊 Propriedades</button>
-            <button class="btn" onclick="resetView()">🔄 Reset Vista</button>
-            <span id="info" style="margin-left: 10px;"></span>
+    <div class="container">
+        <h1>🏗️ Visualizador IFC - PGE</h1>
+        <p>Visualize modelos BIM IFC diretamente no navegador</p>
+        
+        <div style="margin: 30px 0;">
+            <a href="ifc-viewer.html" class="btn">
+                🚀 Abrir Visualizador IFC
+            </a>
+            <a href="ifc-viewer.html?model=public/IFC-ELE-SEINF-PGE.ifc" class="btn">
+                📊 Carregar Modelo PGE
+            </a>
+        </div>
+
+        <div class="features">
+            <h3>✨ Funcionalidades:</h3>
+            <div class="feature-item">✅ Visualização 3D de modelos IFC</div>
+            <div class="feature-item">✅ Navegação com orbit controls</div>
+            <div class="feature-item">✅ Seleção de elementos BIM</div>
+            <div class="feature-item">✅ Propriedades dos elementos</div>
+            <div class="feature-item">✅ Upload de arquivos IFC</div>
+            <div class="feature-item">✅ Compatível com qualquer navegador</div>
+        </div>
+
+        <div style="margin-top: 30px; color: #666; font-size: 14px;">
+            <strong>Arquivo atual:</strong> IFC-ELE-SEINF-PGE.ifc<br>
+            <strong>Tecnologia:</strong> IFC.js + Three.js + Vercel
         </div>
     </div>
-
-    <!-- IFC.js via CDN -->
-    <script src="https://unpkg.com/web-ifc@0.0.43/web-ifc-api.js"></script>
-    <script src="https://unpkg.com/web-ifc-three@0.0.119/dist/web-ifc-three.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
-
-    <script>
-        // Elementos da UI
-        const loadingElement = document.getElementById('loading');
-        const infoElement = document.getElementById('info');
-        const fileInput = document.getElementById('fileInput');
-        const viewerContainer = document.getElementById('viewer-container');
-
-        // Variáveis globais
-        let ifcModel;
-        let selectedElement = null;
-
-        // Configuração do IFC.js
-        const ifcAPI = new WebIFC.IfcAPI();
-        const ifcLoader = new WebIFCThree.IfcLoader();
-
-        // Inicializar visualizador
-        async function initViewer() {
-            try {
-                loadingElement.textContent = 'Inicializando IFC.js...';
-                
-                // Configurar Three.js
-                const scene = new THREE.Scene();
-                scene.background = new THREE.Color(0xaaaaaa);
-
-                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                camera.position.set(10, 10, 10);
-
-                const renderer = new THREE.WebGLRenderer({ antialias: true });
-                renderer.setSize(viewerContainer.clientWidth, viewerContainer.clientHeight);
-                viewerContainer.appendChild(renderer.domElement);
-
-                // Luzes
-                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-                scene.add(ambientLight);
-
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(50, 50, 50);
-                scene.add(directionalLight);
-
-                // Controles
-                const controls = new THREE.OrbitControls(camera, renderer.domElement);
-                controls.enableDamping = true;
-
-                // Inicializar IFC.js
-                await ifcAPI.Init();
-                ifcLoader.ifcManager.setWasmPath("https://unpkg.com/web-ifc@0.0.43/");
-                ifcLoader.setupIfcLoader(ifcAPI, scene);
-
-                // Event listener para seleção de elementos
-                window.addEventListener('click', (event) => {
-                    const mouse = new THREE.Vector2();
-                    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-                    mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
-                    
-                    selectElement(mouse, camera, ifcLoader);
-                });
-
-                // Animação
-                function animate() {
-                    requestAnimationFrame(animate);
-                    controls.update();
-                    renderer.render(scene, camera);
-                }
-                animate();
-
-                // Redimensionamento
-                window.addEventListener('resize', () => {
-                    camera.aspect = window.innerWidth / window.innerHeight;
-                    camera.updateProjectionMatrix();
-                    renderer.setSize(window.innerWidth, window.innerHeight);
-                });
-
-                loadingElement.style.display = 'none';
-                infoElement.textContent = 'Pronto para carregar IFC';
-
-                console.log('✅ Visualizador IFC inicializado!');
-
-            } catch (error) {
-                console.error('Erro na inicialização:', error);
-                loadingElement.textContent = 'Erro ao inicializar visualizador';
-            }
-        }
-
-        // Carregar arquivo IFC
-        async function loadIFC(file) {
-            if (!file || !file.name.toLowerCase().endsWith('.ifc')) {
-                alert('Por favor, selecione um arquivo .IFC');
-                return;
-            }
-
-            try {
-                loadingElement.style.display = 'block';
-                loadingElement.textContent = 'Carregando IFC...';
-
-                const url = URL.createObjectURL(file);
-                ifcModel = await ifcLoader.load(url);
-                
-                URL.revokeObjectURL(url);
-
-                // Ajustar vista ao modelo
-                const bbox = new THREE.Box3().setFromObject(ifcModel);
-                const center = bbox.getCenter(new THREE.Vector3());
-                const size = bbox.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
-
-                camera.position.copy(center);
-                camera.position.x += maxDim * 1.5;
-                camera.position.y += maxDim * 0.5;
-                camera.position.z += maxDim * 1.5;
-
-                controls.target.copy(center);
-                controls.update();
-
-                infoElement.textContent = `IFC carregado: ${file.name}`;
-                loadingElement.style.display = 'none';
-
-                console.log('✅ IFC carregado com sucesso!', ifcModel);
-
-            } catch (error) {
-                console.error('Erro ao carregar IFC:', error);
-                loadingElement.textContent = 'Erro ao carregar arquivo IFC';
-            }
-        }
-
-        // Selecionar elemento no modelo
-        async function selectElement(mouse, camera, ifcLoader) {
-            const element = await ifcLoader.ifcManager.pick(mouse, camera, ifcModel);
-            
-            if (element) {
-                // Remover seleção anterior
-                if (selectedElement) {
-                    ifcLoader.ifcManager.removeSubset(ifcModel, selectedMaterial);
-                }
-                
-                // Destacar elemento selecionado
-                selectedElement = element;
-                ifcLoader.ifcManager.createSubset({
-                    modelID: ifcModel,
-                    ids: [element],
-                    removePrevious: true,
-                    material: new THREE.MeshLambertMaterial({ color: 0xff0000 })
-                });
-
-                // Mostrar propriedades
-                const properties = await ifcLoader.ifcManager.getItemProperties(ifcModel, element);
-                console.log('Propriedades do elemento:', properties);
-                
-                showProperties(properties);
-            }
-        }
-
-        // Mostrar propriedades
-        function showProperties(properties) {
-            // Criar painel de propriedades
-            let propsPanel = document.getElementById('properties-panel');
-            if (!propsPanel) {
-                propsPanel = document.createElement('div');
-                propsPanel.id = 'properties-panel';
-                propsPanel.style.cssText = `
-                    position: absolute;
-                    top: 60px;
-                    right: 10px;
-                    background: rgba(0,0,0,0.8);
-                    color: white;
-                    padding: 15px;
-                    border-radius: 5px;
-                    max-width: 300px;
-                    max-height: 400px;
-                    overflow-y: auto;
-                    z-index: 1000;
-                `;
-                viewerContainer.appendChild(propsPanel);
-            }
-
-            let html = '<h3>📊 Propriedades</h3>';
-            if (properties) {
-                for (const [key, value] of Object.entries(properties)) {
-                    if (value && typeof value === 'object') {
-                        html += `<strong>${key}:</strong><br>`;
-                        for (const [subKey, subValue] of Object.entries(value)) {
-                            if (subValue !== null && subValue !== undefined) {
-                                html += `&nbsp;&nbsp;${subKey}: ${subValue}<br>`;
-                            }
-                        }
-                    } else if (value !== null && value !== undefined) {
-                        html += `<strong>${key}:</strong> ${value}<br>`;
-                    }
-                }
-            }
-            propsPanel.innerHTML = html;
-        }
-
-        function toggleProperties() {
-            const panel = document.getElementById('properties-panel');
-            if (panel) {
-                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-            }
-        }
-
-        function resetView() {
-            if (ifcModel) {
-                const bbox = new THREE.Box3().setFromObject(ifcModel);
-                const center = bbox.getCenter(new THREE.Vector3());
-                const size = bbox.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
-
-                camera.position.copy(center);
-                camera.position.x += maxDim * 1.5;
-                camera.position.y += maxDim * 0.5;
-                camera.position.z += maxDim * 1.5;
-
-                controls.target.copy(center);
-                controls.update();
-            }
-        }
-
-        // Event listeners
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) loadIFC(file);
-        });
-
-        // Inicializar quando a página carregar
-        window.addEventListener('load', initViewer);
-    </script>
 </body>
 </html>
