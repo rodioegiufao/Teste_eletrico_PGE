@@ -29,9 +29,10 @@
   <div id="loading">Carregando modelo...</div>
   <div id="error"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/examples/js/loaders/GLTFLoader.js"></script>
+  <!-- Versão mais recente e estável do Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js"></script>
 
   <script>
     // Debug inicial
@@ -60,7 +61,7 @@
       directionalLight.position.set(10, 10, 10);
       scene.add(directionalLight);
 
-      // Controles de órbita
+      // Controles de órbita - AGORA CORRETO
       const controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.05;
@@ -70,7 +71,7 @@
       
       console.log('Tentando carregar modelo.glb...');
       
-      // URL do modelo - testando diferentes caminhos
+      // URL do modelo
       const modelUrl = '/modelo.glb';
       console.log('URL do modelo:', modelUrl);
 
@@ -100,14 +101,7 @@
         function (error) {
           console.error('Erro ao carregar modelo:', error);
           loadingElement.style.display = 'none';
-          errorElement.textContent = 'Erro ao carregar o modelo: ' + error.message;
-          
-          // Tenta caminho alternativo
-          console.log('Tentando caminho alternativo ./modelo.glb');
-          loader.load('./modelo.glb', function (gltf) {
-            scene.add(gltf.scene);
-            loadingElement.style.display = 'none';
-          });
+          errorElement.textContent = 'Erro ao carregar o modelo. Verifique o console.';
         }
       );
 
